@@ -31,7 +31,7 @@ def extract_text_from_pdf(pdf_path):
 def call_llm_real(text, api_key):    
     prompt = f"""
     Extract the following fields from the legal case:
-    - decision_type out of ["majority opinion", "per curiam", "plurality opinion", "equally divided", "dismissal - rule 46", "dismissal - other", "dismissal - improvidently granted", "dismissal - moot", "memorandum", "opinion of the court"]
+    - decision_type out of ["majority opinion", "per curiam", "plurality opinion", "equally divided", "dismissal - other", "dismissal - improvidently granted", "dismissal - moot", "opinion of the court"]
     - disposition out of ["reversed/remanded", "affirmed", "reversed", "vacated/remanded", "reversed in-part/remanded", "none", "reversed in-part", "vacated", "vacated in-part/remanded"]
     - first_party
     - second_party
@@ -87,9 +87,8 @@ def setup_one_hot_encoders():
     # Define possible values for categorical features
     decision_types = [
         "majority opinion", "per curiam", "plurality opinion",
-        "equally divided", "dismissal - rule 46", "dismissal - other",
-        "dismissal - improvidently granted", "dismissal - moot", 
-        "memorandum", "opinion of the court"
+        "equally divided", "opinion of the court", "dismissal - other",
+        "dismissal - improvidently granted", "dismissal - moot"
     ]
     
     dispositions = [
@@ -116,12 +115,10 @@ def main(pdf_path, api_key):
         vectorizer = joblib.load("vectorizer.pkl")
         
         # Load or create LDA model - ideally this should also be saved/loaded from training
-        # If you have a saved LDA model, load it with:
         try:
             lda_model = joblib.load("lda_model1.pkl")
             print("Loaded existing LDA model")
         except FileNotFoundError:
-            # If no saved LDA model exists, create a new one with the same parameters
             print("LDA model not found, creating a new one with n_components=200")
             lda_model = LatentDirichletAllocation(n_components=200, random_state=0)
             
