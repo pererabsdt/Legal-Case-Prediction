@@ -9,6 +9,8 @@ from mistralai import Mistral, UserMessage
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
 from sklearn.preprocessing import OneHotEncoder
+from dotenv import load_dotenv
+import os
 
 # Download required NLTK resources
 nltk.download('punkt')
@@ -237,7 +239,8 @@ def main(pdf_path, api_key):
 # Run
 # --------------------------
 if __name__ == "__main__":
-    pdf_path = "example_legal_case.pdf"  # Replace with your actual PDF file path
-    api_key = "hlQHMYe6OKcfXow2rRZixZvCglwKD3YI"  # Replace with your actual API key
+    load_dotenv()  # Load environment variables from .env file
+    pdf_path = "example_legal_case.pdf" 
+    api_key = os.getenv("api_key") 
     result = main(pdf_path, api_key)
     print(json.dumps(result, indent=2))
