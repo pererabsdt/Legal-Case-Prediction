@@ -5,6 +5,7 @@ import joblib
 import PyPDF2
 import numpy as np
 import pandas as pd
+import scipy.sparse
 from mistralai import Mistral, UserMessage
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
@@ -116,7 +117,7 @@ def main(pdf_path, api_key):
         
         # Load or create LDA model - ideally this should also be saved/loaded from training
         try:
-            lda_model = joblib.load("lda_model1.pkl")
+            lda_model = joblib.load("lda_model.pkl")
             print("Loaded existing LDA model")
         except FileNotFoundError:
             print("LDA model not found, creating a new one with n_components=200")
@@ -142,73 +143,38 @@ def main(pdf_path, api_key):
         # Step 4: Vectorize cleaned facts text
         X_text = vectorizer.transform([cleaned_facts])
         print(f"Raw text features shape after vectorization: {X_text.shape}")
-        
-        # Step 5: Apply LDA transformation to reduce dimensions to 200
-        # Note: If this is a new LDA model, it's being fit on a single document which is not ideal.
-        # In a real scenario, you should use the same LDA model that was fit during training.
-        if hasattr(lda_model, 'components_') and lda_model.components_.shape[0] > 0:
-            # LDA model is already fitted
-            X_lda = lda_model.transform(X_text)
-        else:
-            # LDA model needs to be fit first (not ideal, but as a fallback)
-            X_lda = lda_model.fit_transform(X_text)
-            # Save the fitted model for future use
-            joblib.dump(lda_model, "lda_model.pkl")
-        
-        print(f"LDA transformed features shape: {X_lda.shape}")
-        
-        # Step 6: One-hot encode categorical features
+
+        # Step 5: One-hot encode categorical features
         decision_type_one_hot = decision_type_encoder.transform([[features["decision_type"].lower()]])
         disposition_one_hot = disposition_encoder.transform([[features["disposition"].lower()]])
-        
+
         print(f"Decision type features shape: {decision_type_one_hot.shape}")
         print(f"Disposition features shape: {disposition_one_hot.shape}")
 
-        # Step 7: Determine how to combine features based on the model's expectations
-        # If model expects exactly 200 features (LDA only)
-        if model.n_features_in_ == 200:
-            print("Model expects exactly 200 features (LDA features only)")
-            X_combined = X_lda
-        # If model expects 200 + categorical features
-        elif model.n_features_in_ == X_lda.shape[1] + decision_type_one_hot.shape[1] + disposition_one_hot.shape[1]:
-            print("Model expects LDA features + one-hot encoded categorical features")
-            X_combined = np.hstack((X_lda, decision_type_one_hot, disposition_one_hot))
-        # If model was trained with original numeric encoding (LDA + 2 numeric features)
-        elif model.n_features_in_ == X_lda.shape[1] + 2:
-            print("Model expects LDA features + 2 numeric categorical features")
-            # Convert one-hot back to numeric for compatibility
-            decision_type_map = {
-                "majority opinion": 0, "per curiam": 1, "plurality opinion": 2,
-                "equally divided": 3, "dismissal - rule 46": 4, "dismissal - other": 5,
-                "dismissal - improvidently granted": 6, "dismissal - moot": 7, 
-                "memorandum": 8, "opinion of the court": 9
-            }
-            disposition_map = {
-                "reversed/remanded": 0, "affirmed": 1, "reversed": 2, "vacated/remanded": 3,
-                "reversed in-part/remanded": 4, "none": 5, "reversed in-part": 6,
-                "vacated": 7, "vacated in-part/remanded": 8
-            }
-            decision_type_num = decision_type_map.get(features["decision_type"].lower(), 0)
-            disposition_num = disposition_map.get(features["disposition"].lower(), 0)
-            X_combined = np.hstack((X_lda, [[decision_type_num, disposition_num]]))
-        else:
-            # As a fallback, try to match the expected feature count
-            expected_features = model.n_features_in_
-            available_features = np.hstack((X_lda, decision_type_one_hot, disposition_one_hot))
-            
-            if available_features.shape[1] > expected_features:
-                print(f"Warning: Too many features. Truncating to {expected_features}")
-                X_combined = available_features[:, :expected_features]
-            elif available_features.shape[1] < expected_features:
-                print(f"Warning: Too few features. Padding to {expected_features}")
-                padding = np.zeros((available_features.shape[0], expected_features - available_features.shape[1]))
-                X_combined = np.hstack((available_features, padding))
-            else:
-                X_combined = available_features
+        # Step 6: Combine vectorized text with one-hot encoded features before LDA
+        # This is the key change - combine before LDA transformation
+        import scipy.sparse
+        X_combined_raw = scipy.sparse.hstack([X_text, scipy.sparse.csr_matrix(decision_type_one_hot), 
+                                            scipy.sparse.csr_matrix(disposition_one_hot)])
+        print(f"Combined raw features shape: {X_combined_raw.shape}")
         
-        print(f"Combined features shape: {X_combined.shape}")
-        print(f"Model expects shape with {model.n_features_in_} features")
+        # Step 7: Apply LDA transformation to the combined features
+        if hasattr(lda_model, 'components_') and lda_model.components_.shape[0] > 0:
+            # LDA model is already fitted
+            X_lda = lda_model.transform(X_combined_raw)
+        else:
+            # LDA model needs to be fit first (not ideal, but as a fallback)
+            X_lda = lda_model.fit_transform(X_combined_raw)
+            # Save the fitted model for future use
+            joblib.dump(lda_model, "lda_model.pkl")
 
+        print(f"LDA transformed features shape: {X_lda.shape}")
+        
+        X_combined = X_lda
+
+        print(f"Final features shape: {X_combined.shape}")
+        print(f"Model expects shape with {model.n_features_in_} features")
+        
         # Step 8: Predict
         prediction = model.predict(X_combined)[0]
         prediction_proba = model.predict_proba(X_combined)[0]
@@ -226,6 +192,7 @@ def main(pdf_path, api_key):
                 "disposition": features["disposition"]
             }
         }
+
     except Exception as e:
         import traceback
         print(f"Error in prediction pipeline: {e}")
