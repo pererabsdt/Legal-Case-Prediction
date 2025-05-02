@@ -152,7 +152,6 @@ def main(pdf_path, api_key):
         print(f"Disposition features shape: {disposition_one_hot.shape}")
 
         # Step 6: Combine vectorized text with one-hot encoded features before LDA
-        # This is the key change - combine before LDA transformation
         import scipy.sparse
         X_combined_raw = scipy.sparse.hstack([X_text, scipy.sparse.csr_matrix(decision_type_one_hot), 
                                             scipy.sparse.csr_matrix(disposition_one_hot)])
