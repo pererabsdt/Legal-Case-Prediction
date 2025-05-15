@@ -106,7 +106,7 @@ def main(pdf_path):
             lda_model = LatentDirichletAllocation(n_components=200, random_state=0)
             
         # Load the trained prediction model
-        model = joblib.load("case_prediction_model_1.pkl")
+        model = joblib.load("case_prediction_model.pkl")
         
         # Setup one-hot encoders
         decision_type_encoder, disposition_encoder = setup_one_hot_encoders()
